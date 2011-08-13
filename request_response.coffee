@@ -1,7 +1,8 @@
 sys = require "sys"
 rabbit = require "amqp"
 
-exchangeOptions = { type: "fanout", autoDelete: true }
+requestEx = responseEx = requestQ = responseQ = null
+exchangeOptions = { type: "direct", autoDelete: true }
 queueOptions = { autoDelete: true }
 message = { text: "Test" }
 
@@ -10,14 +11,23 @@ connection.on( "ready", () -> whenConnectionReady() )
 
 whenConnectionReady = () ->
     connection.exchange(
-        "fanout.exchange",
+        "request.exchange",
         exchangeOptions,
-        ( exchange ) -> whenExchangeReady( exchange )
+        ( exchange ) ->
+            requestEx = exchange
+            requestQ = whenExchangeReady( exchange, "request.queue" )
     )
 
-whenExchangeReady = ( exchange ) ->
-    queue1 = createQueue( connection, exchange, "queue1" )
-    queue2 = createQueue( connection, exchange, "queue2" )
+    connection.exchange(
+        "response.exchange",
+        exchangeOptions,
+        ( exchange ) ->
+            responseEx = exchange
+            responseQ = whenExchangeReady( exchange, "response.queue" )
+    )
+
+whenExchangeReady = ( exchange, queueName ) ->
+    queue = createQueue( connection, exchange, queueName )
     whenQueueIsReady( queue2, () -> publishMessage( exchange, message, 5 ) )
 
 createQueue = ( connection, exchange, queueName ) ->
@@ -43,4 +53,3 @@ publishMessage = ( exchange, message, repeat ) ->
             console.log("Sending message " + repeat + " times.")
             for x in [1..repeat]
                 do () -> exchange.publish( "", message, {} )
-
