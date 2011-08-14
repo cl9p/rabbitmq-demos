@@ -1,18 +1,22 @@
 sys = require "sys"
 rabbit = require "amqp"
-log4js = require "log4js"
+cradle = require "cradle"
 
 queueOptions = { durable: true }
 connection = rabbit.createConnection( { host: "localhost", port: 5672 } )
 connection.on( "ready", () -> whenConnectionReady() )
 
-log4js.addAppender( log4js.fileAppender("event.log"), "events" )
-log = log4js.getLogger( "events" )
-log.setLevel("INFO")
+couch = new (cradle.Connection)(
+    "http://localhost",
+    5984,
+    { cache: false, raw: false })
+
+db = couch.database("durabledb")
+db.create()
 
 whenConnectionReady = () ->
-    queue = createQueue( connection, "durable.fanout", "durable.log" )
-    whenQueueIsReady( queue, () -> log.info( "Queue ready" ) )
+    queue = createQueue( connection, "durable.fanout", "durable.db" )
+    whenQueueIsReady( queue, () -> console.log( "Queue ready" ) )
 
 createQueue = ( connection, exchange, queueName ) ->
     connection.queue(
@@ -25,7 +29,10 @@ bindQueue = ( queue, exchange ) ->
     queue.bind( exchange, "*" )
     queue.subscribe(
         ( message, headers, deliveryInfo ) ->
-            log.info( message.event + " " + message.value )
+            db.save( message.value,
+                { event: message.event },
+                (err,res) -> console.log( "Couch sez: " + res )
+            )
     )
 
 whenQueueIsReady = ( queue, callback ) ->
